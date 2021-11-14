@@ -1,0 +1,3 @@
+gcc SDL_Mandelbrot.cpp -o runCPU -lSDL2main -lm $(pkg-config --cflags --libs  sdl2 SDL2_mixer SDL2_image ) -lstdc++
+
+nvcc SDL_Mandelbrot.cu -o runGPU -lSDL2main -lm $(pkg-config --cflags --libs  sdl2 SDL2_mixer SDL2_image ) -lstdc++
