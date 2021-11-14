@@ -17,10 +17,14 @@
 SDL_Window* win;
 SDL_Renderer* rend;
 
-const int WIDTH = 1000;
-const int HEIGHT = 1000;
+//Width and Height of window
+const int WIDTH = 1024;
+const int HEIGHT = 1024;
+
+//Classify a coordinate with a magnitude larger than DIVERGE as diverged (will stop further itterations of that coordinate).
 const double DIVERGE = 2;
 
+//Define class which give coordinate information
 class coordInfo
 {
   public:
@@ -32,17 +36,20 @@ class coordInfo
     double step_x;
     double step_y;
 
+    //Step sizes of real and imaginary axis
     void Steps()
     {
       step_x = (end_x - start_x) / (WIDTH - 1);
       step_y = (end_y - start_y) / (HEIGHT - 1);
     }
 
+    //returns x coordinate given the pixel value on the x axis
     double xValue(int i)
     {
       return(start_x + i * step_x);
     }
 
+    //returns y coordinate given the pixel value on the y axis
     double yValue(int j)
     {
       return(start_y + j * step_y);
@@ -52,50 +59,63 @@ class coordInfo
 class fracVals
 {
   public:
-    thrust::complex<double> c;
-    thrust::complex<double> I = thrust::complex<double>(0, 1);;
+    thrust::complex<double> c; //Coordinate on complex plane
+    thrust::complex<double> I = thrust::complex<double>(0, 1);; // 1i
     thrust::complex<double> z; //z_nth iteration
     int n; //Number of iterations
-    bool isDiverged;
+    bool isDiverged; //False if not above DIVERGE
 
+    //Here you can change the iterative formular (Mandelbrot is z = z * z + c)
     CUDA_CALLABLE_MEMBER void Itterate()
     {
-      if(n == 0)
-      {
-        z = c;
-      }
-      z = thrust::tan(thrust::pow(z, z)) + c;
-      //z = z * z + c;
+      /* Mandelbrot function
+      z = z * z + c;
       if(thrust::abs(z) > DIVERGE)
       {
         isDiverged = true;
       }
       n++;
+      */
+
+      ////////////////////////////////////////////Custom formula start
+      if(n == 0)
+      {
+        z = c;
+      }
+      z = thrust::tan(thrust::pow(z, z)) + c; //tan(z^z) + c
+      //z = z * z + c;
+      if(thrust::abs(z) > DIVERGE) //Mathematically this is incorrect for this formula since tan is periodic (This formula just creates a nice looking fractal)
+      {
+        isDiverged = true;
+      }
+      n++;
+      ////////////////////////////////////////////Custom formula end
     }
 
+    //Colour is a [Red, Green, Blue] array
     void RGB(coordInfo Grid, int N, int* colour)
     {
       //ORIGINAL DIMENTION
 
 
-      if(n == N)
+      if(n == N) //Give colour depending on where the iteration z is on the complex plane (green for real, blue for imaginary)
       {
-        colour[0] = 200;
+        colour[0] = 200; //Customise value to change colour
         colour[1] = (int)floor(255 * (z.real() - DIVERGE) / (2 * DIVERGE));
         colour[2] = (int)floor(255 * (z.imag() - DIVERGE) / (2 * DIVERGE));
       }
-      else
+      else //Give colour depending on how quickly z diverged. Darker the red, the quicker it diverged
       {
         colour[0] = (int)floor(255 * log(n) / log(N));
-        colour[1] = 50;
-        colour[2] = 50;
+        colour[1] = 50; //Customise value to change colour
+        colour[2] = 50; //Customise value to change colour
       }
     }
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
-fracVals** init_Fractal(coordInfo Grid)
+fracVals** init_Fractal(coordInfo Grid) //Create 2D array of fractal points
 {
   double x, y;
   int i, j;
@@ -134,7 +154,7 @@ void itterateAll_Fractal(fracVals** M, int N, coordInfo Grid)
     for(k = 0; k < N; k++)
     {
       M[i][j].Itterate();
-      if(M[i][j].isDiverged == true)
+      if(M[i][j].isDiverged == true) //Once diverged, move to next point
       {
         break;
       }
@@ -153,10 +173,8 @@ void draw_Fractal(fracVals** M, int N, coordInfo Grid)
     for(j = 0; j < HEIGHT; j++)
     {
       M[i][j].RGB(Grid, N, colour);
-      //printf("%f %f\n", real(M[i][j].z), imag(M[i][j].z));
-
-      SDL_SetRenderDrawColor(rend, colour[0], colour[1], colour[2], 0xFF); //Draw vertical line
-      SDL_RenderDrawPoint(rend, i, j);
+      SDL_SetRenderDrawColor(rend, colour[0], colour[1], colour[2], 0xFF); //Draw pixel
+      SDL_RenderDrawPoint(rend, i, j); //Draw pixel
 
     }
   }
@@ -203,6 +221,7 @@ void close_SDL()
   SDL_Quit();
 }
 
+//SDL event function
 void events_SDL()
 {
   coordInfo media_SDL(double, double, double, double, int);
@@ -214,19 +233,19 @@ void events_SDL()
   bool RightButton = false;
   bool LeftButton = false;
   //bool NewState = true;
-  int* RightClickPos = (int*)calloc(2, sizeof(int));
-  int* LeftClickPos = (int*)calloc(2, sizeof(int));
+  int* RightClickPos = (int*)calloc(2, sizeof(int)); //[x, y] top right
+  int* LeftClickPos = (int*)calloc(2, sizeof(int)); //[x, y] bottom left
 
   // annimation loop
   int x, y;
   Uint32 buttons;
   SDL_Event event;
 
-  int historySize = 1000;
+  int historySize = 1000; //History size of zoom
   int historyIndex = 0;
-  coordInfo* GridHistory = (coordInfo*)calloc(historySize, sizeof(coordInfo));
+  coordInfo* GridHistory = (coordInfo*)calloc(historySize, sizeof(coordInfo)); //Stores history of different zooms
 
-  while (!close)
+  while (!close) //While SDL window is open
   {
     historyIndex = 0;
     GridHistory[historyIndex] = media_SDL(-DIVERGE, DIVERGE, -DIVERGE, DIVERGE, N);
@@ -247,13 +266,13 @@ void events_SDL()
           // keyboard API for key pressed
           switch (event.key.keysym.scancode)
           {
-            case SDL_SCANCODE_E:
+            case SDL_SCANCODE_E: //Changer number of iterations
               printf("Enter number of itterations\n");
               scanf("%d", &N);
               GridHistory[historyIndex] = media_SDL(GridHistory[historyIndex].start_x, GridHistory[historyIndex].end_x, GridHistory[historyIndex].start_y, GridHistory[historyIndex].end_y, N);
               break;
 
-            case SDL_SCANCODE_BACKSPACE:
+            case SDL_SCANCODE_BACKSPACE: //Zoom out
               if(historyIndex > 0)
               {
                 printf("Undone zoom\n");
@@ -274,21 +293,21 @@ void events_SDL()
       SDL_PumpEvents();  // make sure we have the latest mouse state.
       buttons = SDL_GetMouseState(&x, &y);
 
-      if ((buttons & SDL_BUTTON_LMASK) != 0)
+      if ((buttons & SDL_BUTTON_LMASK) != 0) //Bottom left (left click)
       {
         LeftButton = true;
         LeftClickPos[0] = x;
         LeftClickPos[1] = y;
       }
 
-      if ((buttons & SDL_BUTTON_RMASK) != 0)
+      if ((buttons & SDL_BUTTON_RMASK) != 0) //Top right (right click)
       {
         RightButton = true;
         RightClickPos[0] = x;
         RightClickPos[1] = y;
       }
 
-      if(LeftButton && RightButton)
+      if(LeftButton && RightButton) //Once both left and right corners are made, zoom in.
       {
         printf("%f %f %f %f\n", GridHistory[historyIndex].xValue(LeftClickPos[0]), GridHistory[historyIndex].yValue(LeftClickPos[1]), GridHistory[historyIndex].xValue(RightClickPos[0]), GridHistory[historyIndex].yValue(RightClickPos[1]));
 
@@ -300,9 +319,6 @@ void events_SDL()
       }
     }
     SDL_DestroyRenderer(rend);
-
-    // calculates to 60 fps
-    //SDL_Delay(1000 / 60);
   }
 }
 
@@ -318,6 +334,7 @@ coordInfo media_SDL(double start_x, double end_x, double start_y, double end_y, 
 
   Grid.Steps();
 
+  //Total threads = THREADS_x * THREADS_y, MAXIMUM IS 32 by 32 for this program on any GPU (even if it has more than 1024 threads).
   int THREADS_x = 32;
   int THREADS_y = 32;
   int BLOCKSIZE_x = (int)ceil(WIDTH / THREADS_x) + 1;
